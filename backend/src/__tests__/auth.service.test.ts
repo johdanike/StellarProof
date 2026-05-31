@@ -27,7 +27,7 @@ function makeUser(overrides: Record<string, unknown> = {}) {
     isActive: true,
     stellarPublicKey: undefined,
     resetPasswordToken: undefined,
-    // FIXED: Safely cast undefined to Date to satisfy TypeScript
+    // Safely cast to Date to satisfy the TS compiler
     resetPasswordExpires: undefined as unknown as Date,
     comparePassword: jest.fn().mockResolvedValue(true),
     save: jest.fn().mockResolvedValue(undefined),
@@ -43,8 +43,10 @@ function makeUser(overrides: Record<string, unknown> = {}) {
 
 function mockFindOne(result: unknown) {
   mockedFindOne.mockReturnValue({
+    // Handles User.findOne().select().exec() for login
     select: () => ({ exec: () => Promise.resolve(result) }),
-    exec: () => Promise.resolve(result)
+    // Handles User.findOne().exec() for forgotPassword
+    exec: () => Promise.resolve(result),
   });
 }
 
@@ -137,21 +139,22 @@ describe('AuthService.forgotPassword', () => {
 
     const user = makeUser({
       resetPasswordToken: undefined,
-      // FIXED: Safely cast undefined to Date to satisfy TypeScript
       resetPasswordExpires: undefined as unknown as Date,
       save: jest.fn().mockResolvedValue(undefined),
     });
 
     mockFindOne(user);
 
-    // Note: The service returns void, the controller handles the message payload
-    await service.forgotPassword('user@example.com');
+    // The service returns void, so we just await execution
+    // Pass a spaced/uppercase email to ensure normalization/trim occurs
+    await service.forgotPassword(' USER@example.com ');
 
     expect(mockedFindOne).toHaveBeenCalledWith({ email: 'user@example.com' });
     expect(user.resetPasswordToken).toBe(hashedToken);
     expect(user.resetPasswordToken).not.toBe(rawToken);
     expect(user.resetPasswordExpires).toBeInstanceOf(Date);
-    expect((user.resetPasswordExpires as Date).getTime()).toBeGreaterThan(Date.now());
+    // Safely cast to access the .getTime() method
+    expect((user.resetPasswordExpires as unknown as Date).getTime()).toBeGreaterThan(Date.now());
     expect(user.save).toHaveBeenCalledTimes(1);
   });
 
@@ -159,7 +162,6 @@ describe('AuthService.forgotPassword', () => {
     mockFindOne(null);
 
     await service.forgotPassword('missing@example.com');
-    
     // Ensure the save method is never called if the user doesn't exist
     expect(mockedFindOne).toHaveBeenCalledWith({ email: 'missing@example.com' });
   });
